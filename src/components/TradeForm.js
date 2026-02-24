@@ -14,13 +14,11 @@ export default function TradeForm({
 }) {
   const [ticker, setTicker] = useState(initialTicker);
   const [side, setSide] = useState(initialSide);
-  const [shares, setShares] = useState('');
+  const [usdAmount, setUsdAmount] = useState('');
   const [price, setPrice] = useState('');
   const [commission, setCommission] = useState('');
   const [orderType, setOrderType] = useState('trade');
   const [currency, setCurrency] = useState('USD');
-  const [instrumentType, setInstrumentType] = useState('stock');
-  const [baseCurrency, setBaseCurrency] = useState('');
   const [error, setError] = useState('');
 
   // Initialize with provided values
@@ -33,28 +31,59 @@ export default function TradeForm({
     }
   }, [initialTicker, initialSide]);
 
-  const handleClickMax = () => {
-    setShares(maxSharesToSell.toString());
-    if (currentPrice > 0) {
-      setPrice(currentPrice.toString());
-      const autoComm = calculateAutoCommission(maxSharesToSell);
-      setCommission(autoComm.toFixed(2));
+  const COMMISSION_PER_SHARE = 0.005;
+  const COMMISSION_MIN = 1.0;
+
+  const calculateSharesFromUsd = (usdValue, priceValue, includeCommission = true) => {
+    const parsedUsd = parseFloat(usdValue);
+    const parsedPrice = parseFloat(priceValue);
+    if (!parsedUsd || !parsedPrice) return 0;
+
+    if (!includeCommission) {
+      return parsedUsd / parsedPrice;
     }
+
+    const sharesWithMin = (parsedUsd - COMMISSION_MIN) / parsedPrice;
+    const minCommissionShareCap = COMMISSION_MIN / COMMISSION_PER_SHARE;
+    if (sharesWithMin > 0 && sharesWithMin < minCommissionShareCap) {
+      return sharesWithMin;
+    }
+
+    const sharesWithPer = parsedUsd / (parsedPrice + COMMISSION_PER_SHARE);
+    return sharesWithPer > 0 ? sharesWithPer : 0;
+  };
+
+  const getEffectiveShares = (priceValue = price, usdValue = usdAmount) => {
+    return calculateSharesFromUsd(usdValue, priceValue, false);
+  };
+
+  const handleClickMax = () => {
+    setError('');
+    const effectivePrice = currentPrice > 0 ? currentPrice : parseFloat(price) || 0;
+
+    if (effectivePrice <= 0) {
+      setError('Enter price to calculate max by USD');
+      return;
+    }
+    setPrice(effectivePrice.toString());
+    const autoComm = calculateAutoCommission(maxSharesToSell);
+    const maxUsd = maxSharesToSell * effectivePrice;
+    setUsdAmount(maxUsd.toFixed(2));
+    setCommission(autoComm.toFixed(2));
   };
 
   const calculateAutoCommission = (sharesValue) => {
     return calculateCommission(parseFloat(sharesValue) || 0);
   };
 
-  const handleSharesChange = (value) => {
-    if (maxSharesToSell > 0 && parseFloat(value) > maxSharesToSell) {
-      setShares(maxSharesToSell.toString());
-      return;
-    }
-    setShares(value);
-    if (value && price && orderType === 'trade') {
-      const autoComm = calculateAutoCommission(value);
-      setCommission(autoComm.toFixed(2));
+  const handleUsdChange = (value) => {
+    setUsdAmount(value);
+    if (value && price) {
+      const effectiveShares = getEffectiveShares(price, value);
+      if (effectiveShares > 0) {
+        const autoComm = calculateAutoCommission(effectiveShares);
+        setCommission(autoComm.toFixed(2));
+      }
     }
   };
 
@@ -67,33 +96,39 @@ export default function TradeForm({
       setError('Ticker is required');
       return;
     }
-    if (!shares || parseFloat(shares) <= 0) {
-      setError('Enter valid shares (> 0)');
+    if (!usdAmount || parseFloat(usdAmount) <= 0) {
+      setError('Enter valid USD amount (> 0)');
       return;
     }
     if (!price || parseFloat(price) <= 0) {
       setError('Enter valid price (> 0)');
       return;
     }
+
+    const effectiveShares = getEffectiveShares();
+    if (!effectiveShares || effectiveShares <= 0) {
+      setError('Enter a USD amount that yields shares (> 0)');
+      return;
+    }
     // Validate max shares for sell orders
-    if (initialTicker && side === 'sell' && parseFloat(shares) > maxSharesToSell) {
+    if (initialTicker && side === 'sell' && effectiveShares > maxSharesToSell) {
       setError(`Cannot sell more than ${maxSharesToSell} share${maxSharesToSell !== 1 ? 's' : ''}`);
       return;
     }
 
-    const autoComm = orderType === 'order' ? 0 : calculateAutoCommission(shares);
+    const autoComm = calculateAutoCommission(effectiveShares);
 
     try {
       await onAddTrade({
         ticker: ticker.trim().toUpperCase(),
         side,
-        shares: parseFloat(shares),
+        shares: effectiveShares,
         price: parseFloat(price),
         commission: parseFloat(commission) || autoComm,
         orderType,
         currency,
-        baseCurrency: baseCurrency.trim() || null,
-        instrumentType,
+        baseCurrency: null,
+        instrumentType: 'stock',
         realizedPl: 0,
         realizedPlCurrency: currency,
         parentOrderId: null,
@@ -102,13 +137,11 @@ export default function TradeForm({
       // Reset form
       setTicker('');
       setSide('buy');
-      setShares('');
+      setUsdAmount('');
       setPrice('');
       setCommission('');
       setOrderType('trade');
       setCurrency('USD');
-      setInstrumentType('stock');
-      setBaseCurrency('');
       
       if (onClose) {
         onClose();
@@ -142,7 +175,8 @@ export default function TradeForm({
               type="button"
               onClick={() => {
                 setOrderType('trade');
-                setCommission(shares ? calculateAutoCommission(shares).toFixed(2) : '');
+                const effectiveShares = getEffectiveShares();
+                setCommission(effectiveShares ? calculateAutoCommission(effectiveShares).toFixed(2) : '');
               }}
               className={`px-3 py-2 text-sm font-medium rounded transition-colors ${
                 orderType === 'trade'
@@ -168,7 +202,7 @@ export default function TradeForm({
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Ticker */}
-          <div>
+          <div className="order-1">
             <label className="text-xs text-gray-400 dark:text-gray-400 light:text-gray-700 font-mono block mb-1">
               Ticker
             </label>
@@ -183,7 +217,7 @@ export default function TradeForm({
           </div>
 
           {/* Side */}
-          <div>
+          <div className="order-2">
             <label className="text-xs text-gray-400 dark:text-gray-400 light:text-gray-700 font-mono block mb-1">
               Side
             </label>
@@ -198,45 +232,21 @@ export default function TradeForm({
             </select>
           </div>
 
-          {/* Shares */}
-          <div>
-            <label className="text-xs text-gray-400 dark:text-gray-400 light:text-gray-700 font-mono block mb-1">
-              Shares
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              value={shares}
-              onChange={(e) => handleSharesChange(e.target.value)}
-              placeholder="100"
-              className="w-full px-3 py-2 text-sm font-mono bg-slate-900 dark:bg-slate-900 light:bg-white border border-gray-700 dark:border-gray-700 light:border-gray-300 rounded text-gray-100 dark:text-gray-100 light:text-gray-900 placeholder-gray-600 dark:placeholder-gray-600 light:placeholder-gray-400 focus:outline-none focus:border-gray-500 dark:focus:border-gray-500 light:focus:border-gray-400"
-            />
-            {maxSharesToSell > 0 && (
-              <p className="text-xs text-gray-500 dark:text-gray-500 light:text-gray-600 mt-1">
-                Max: <button
-                  type="button"
-                  onClick={handleClickMax}
-                  className="text-blue-400 dark:text-blue-400 light:text-blue-600 hover:text-blue-300 dark:hover:text-blue-300 light:hover:text-blue-700 hover:underline cursor-pointer font-semibold"
-                >
-                  {maxSharesToSell}
-                </button> share{maxSharesToSell !== 1 ? 's' : ''}
-              </p>
-            )}
-          </div>
-
           {/* Price */}
-          <div>
+          <div className="order-3">
             <label className="text-xs text-gray-400 dark:text-gray-400 light:text-gray-700 font-mono block mb-1">
               {orderType === 'order' ? 'Limit Price' : 'Price'}
             </label>
             <input
               type="number"
-              step="0.01"
+              step={orderType === 'order' ? 'any' : '0.01'}
               value={price}
               onChange={(e) => {
-                setPrice(e.target.value);
-                if (shares && orderType === 'trade') {
-                  const autoComm = calculateAutoCommission(shares);
+                const nextPrice = e.target.value;
+                setPrice(nextPrice);
+                const nextShares = getEffectiveShares(nextPrice, usdAmount);
+                if (nextShares > 0) {
+                  const autoComm = calculateAutoCommission(nextShares);
                   setCommission(autoComm.toFixed(2));
                 }
               }}
@@ -245,26 +255,52 @@ export default function TradeForm({
             />
           </div>
 
-          {/* Commission - only for trades */}
-          {orderType === 'trade' && (
-            <div>
-              <label className="text-xs text-gray-400 dark:text-gray-400 light:text-gray-700 font-mono block mb-1">
-                Commission
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={commission}
-                onChange={(e) => setCommission(e.target.value)}
-                placeholder={shares ? calculateAutoCommission(shares).toFixed(2) : '1.00'}
-                className="w-full px-3 py-2 text-sm font-mono bg-slate-900 dark:bg-slate-900 light:bg-white border border-gray-700 dark:border-gray-700 light:border-gray-300 rounded text-gray-100 dark:text-gray-100 light:text-gray-900 placeholder-gray-600 dark:placeholder-gray-600 light:placeholder-gray-400 focus:outline-none focus:border-gray-500 dark:focus:border-gray-500 light:focus:border-gray-400"
-              />
-            </div>
-          )}
+          {/* USD Amount */}
+          <div className="order-4">
+            <label className="text-xs text-gray-400 dark:text-gray-400 light:text-gray-700 font-mono block mb-1">
+              USD Amount
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              value={usdAmount}
+              onChange={(e) => handleUsdChange(e.target.value)}
+              placeholder="1000.00"
+              className="w-full px-3 py-2 text-sm font-mono bg-slate-900 dark:bg-slate-900 light:bg-white border border-gray-700 dark:border-gray-700 light:border-gray-300 rounded text-gray-100 dark:text-gray-100 light:text-gray-900 placeholder-gray-600 dark:placeholder-gray-600 light:placeholder-gray-400 focus:outline-none focus:border-gray-500 dark:focus:border-gray-500 light:focus:border-gray-400"
+            />
+            <p className="text-xs text-gray-500 dark:text-gray-500 light:text-gray-600 mt-1">
+              Est {getEffectiveShares().toFixed(4)}
+            </p>
+            {maxSharesToSell > 0 && (
+              <p className="text-xs text-gray-500 dark:text-gray-500 light:text-gray-600 mt-1">
+                Max: <button
+                  type="button"
+                  onClick={handleClickMax}
+                  className="text-blue-400 dark:text-blue-400 light:text-blue-600 hover:text-blue-300 dark:hover:text-blue-300 light:hover:text-blue-700 hover:underline cursor-pointer font-semibold"
+                >
+                  Use Max
+                </button> ({maxSharesToSell} share{maxSharesToSell !== 1 ? 's' : ''})
+              </p>
+            )}
+          </div>
+
+          <div className="order-5">
+            <label className="text-xs text-gray-400 dark:text-gray-400 light:text-gray-700 font-mono block mb-1">
+              Commission
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              value={commission}
+              onChange={(e) => setCommission(e.target.value)}
+              placeholder={getEffectiveShares() ? calculateAutoCommission(getEffectiveShares()).toFixed(2) : '1.00'}
+              className="w-full px-3 py-2 text-sm font-mono bg-slate-900 dark:bg-slate-900 light:bg-white border border-gray-700 dark:border-gray-700 light:border-gray-300 rounded text-gray-100 dark:text-gray-100 light:text-gray-900 placeholder-gray-600 dark:placeholder-gray-600 light:placeholder-gray-400 focus:outline-none focus:border-gray-500 dark:focus:border-gray-500 light:focus:border-gray-400"
+            />
+          </div>
 
           {!initialTicker && (
             <>
-              <div>
+              <div className="order-6">
                 <label className="text-xs text-gray-400 dark:text-gray-400 light:text-gray-700 font-mono block mb-1">
                   Currency
                 </label>
@@ -278,36 +314,6 @@ export default function TradeForm({
                 </select>
               </div>
 
-              <div>
-                <label className="text-xs text-gray-400 dark:text-gray-400 light:text-gray-700 font-mono block mb-1">
-                  Instrument Type
-                </label>
-                <select
-                  value={instrumentType}
-                  onChange={(e) => setInstrumentType(e.target.value)}
-                  className="w-full px-3 py-2 text-sm font-mono bg-slate-900 dark:bg-slate-900 light:bg-white border border-gray-700 dark:border-gray-700 light:border-gray-300 rounded text-gray-100 dark:text-gray-100 light:text-gray-900 focus:outline-none focus:border-gray-500 dark:focus:border-gray-500 light:focus:border-gray-400"
-                >
-                  <option value="stock">Stock</option>
-                  <option value="fx">FX</option>
-                  <option value="crypto">Crypto</option>
-                  <option value="option">Option</option>
-                </select>
-              </div>
-
-              {instrumentType === 'fx' && (
-                <div>
-                  <label className="text-xs text-gray-400 dark:text-gray-400 light:text-gray-700 font-mono block mb-1">
-                    Base Currency
-                  </label>
-                  <input
-                    type="text"
-                    value={baseCurrency}
-                    onChange={(e) => setBaseCurrency(e.target.value.toUpperCase())}
-                    placeholder="USD"
-                    className="w-full px-3 py-2 text-sm font-mono bg-slate-900 dark:bg-slate-900 light:bg-white border border-gray-700 dark:border-gray-700 light:border-gray-300 rounded text-gray-100 dark:text-gray-100 light:text-gray-900 placeholder-gray-600 dark:placeholder-gray-600 light:placeholder-gray-400 focus:outline-none focus:border-gray-500 dark:focus:border-gray-500 light:focus:border-gray-400"
-                  />
-                </div>
-              )}
             </>
           )}
         </div>

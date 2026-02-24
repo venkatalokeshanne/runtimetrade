@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS trades (
   ticker VARCHAR(10) NOT NULL,
   side VARCHAR(4) NOT NULL CHECK (side IN ('buy', 'sell')),
   shares NUMERIC(15, 2) NOT NULL CHECK (shares > 0),
-  price NUMERIC(10, 2) NOT NULL CHECK (price > 0),
+  price NUMERIC(12, 4) NOT NULL CHECK (price > 0),
   commission NUMERIC(10, 2) NOT NULL CHECK (commission >= 0),
   order_type VARCHAR(10) NOT NULL DEFAULT 'trade' CHECK (order_type IN ('trade', 'order')),
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),

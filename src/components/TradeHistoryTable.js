@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { formatCurrency, formatNumber, getPnLColor } from '@/lib/utils/positions';
 
-export default function TradeHistoryTable({ positions = [], exchangeRate = 1.0, currency = 'USD', onDeleteTrade = null }) {
+export default function TradeHistoryTable({ positions = [], exchangeRate = 1.0, currency = 'USD', onDeleteTrade = null, onMoveToPending = null }) {
   const [priceSortOrder, setPriceSortOrder] = useState('desc');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -133,7 +133,7 @@ export default function TradeHistoryTable({ positions = [], exchangeRate = 1.0, 
                 Date
               </th>
               <th className="px-3 py-2 text-center text-xs font-semibold text-gray-400 dark:text-gray-400 light:text-gray-700 uppercase tracking-wider whitespace-nowrap">
-                Action
+                Actions
               </th>
             </tr>
           </thead>
@@ -167,7 +167,7 @@ export default function TradeHistoryTable({ positions = [], exchangeRate = 1.0, 
                     {formatNumber(trade.shares, 2)}
                   </td>
                   <td className="px-3 py-2 text-center font-mono text-gray-300 dark:text-gray-300 light:text-gray-800">
-                    {formatCurrency(trade.price)}
+                    {formatNumber(trade.price, 5)}
                   </td>
                   <td className="px-3 py-2 text-center font-mono text-gray-400 dark:text-gray-400 light:text-gray-600">
                     {formatCurrencyValue(trade.commission)}
@@ -179,12 +179,21 @@ export default function TradeHistoryTable({ positions = [], exchangeRate = 1.0, 
                     {new Date(trade.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-3 py-2 text-center">
-                    <button
-                      onClick={() => onDeleteTrade && onDeleteTrade(trade.id)}
-                      className="px-2 py-1 text-xs bg-red-600/60 hover:bg-red-600 text-white rounded transition-colors"
-                    >
-                      Delete
-                    </button>
+                    <div className="flex justify-center gap-2">
+                      <button
+                        onClick={() => onMoveToPending && onMoveToPending(trade.id)}
+                        className="px-2 py-1 text-xs bg-amber-600/70 hover:bg-amber-600 text-white rounded transition-colors"
+                        title="Move this trade back to pending"
+                      >
+                        To Pending
+                      </button>
+                      <button
+                        onClick={() => onDeleteTrade && onDeleteTrade(trade.id)}
+                        className="px-2 py-1 text-xs bg-red-600/60 hover:bg-red-600 text-white rounded transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );

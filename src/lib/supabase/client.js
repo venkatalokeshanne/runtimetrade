@@ -135,7 +135,7 @@ export async function getTrades(userId) {
 export async function addTrade(userId, trade) {
   const supabase = getSupabaseClient();
   const { commission, orderType = 'trade' } = trade;
-  const finalCommission = orderType === 'order' ? 0 : parseFloat(commission) || 0;
+  const finalCommission = parseFloat(commission) || 0;
   
   const { data, error } = await supabase
     .from('trades')

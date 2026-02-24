@@ -201,6 +201,25 @@ export default function PortfolioDashboard() {
     }
   }, [trades]);
 
+  const handleMoveToPending = useCallback(async (tradeId) => {
+    try {
+      const moved = await updateTrade(tradeId, { 
+        order_type: 'order' 
+      });
+
+      if (moved) {
+        const updatedTrades = trades.map(t => t.id === tradeId ? { ...t, order_type: 'order' } : t);
+        setTrades(updatedTrades);
+
+        // Re-aggregate positions (will exclude orders automatically)
+        const aggregated = aggregatePositions(updatedTrades);
+        setBasePositions(aggregated);
+      }
+    } catch (error) {
+      console.error('Error moving trade to pending:', error);
+    }
+  }, [trades]);
+
   const formatEUR = (usdValue) => {
     const eurValue = usdValue * exchangeRate;
     return `€${eurValue.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -476,6 +495,7 @@ export default function PortfolioDashboard() {
           exchangeRate={exchangeRate}
           currency={currency}
           onDeleteTrade={handleDeleteTrade}
+          onMoveToPending={handleMoveToPending}
         />
 
         {/* Deposit Modal */}

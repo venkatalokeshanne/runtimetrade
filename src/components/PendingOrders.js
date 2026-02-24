@@ -23,6 +23,8 @@ export default function PendingOrders({ orders, onDeleteOrder, onFillOrder }) {
               <th className="px-4 py-3 text-center text-gray-400 dark:text-gray-400 light:text-gray-600 font-mono text-xs whitespace-nowrap">Side</th>
               <th className="px-4 py-3 text-center text-gray-400 dark:text-gray-400 light:text-gray-600 font-mono text-xs whitespace-nowrap">Qty</th>
               <th className="px-4 py-3 text-center text-gray-400 dark:text-gray-400 light:text-gray-600 font-mono text-xs whitespace-nowrap">Limit Price</th>
+              <th className="px-4 py-3 text-center text-gray-400 dark:text-gray-400 light:text-gray-600 font-mono text-xs whitespace-nowrap">USD Amount</th>
+              <th className="px-4 py-3 text-center text-gray-400 dark:text-gray-400 light:text-gray-600 font-mono text-xs whitespace-nowrap">Commission</th>
               <th className="px-4 py-3 text-center text-gray-400 dark:text-gray-400 light:text-gray-600 font-mono text-xs whitespace-nowrap">Actions</th>
             </tr>
           </thead>
@@ -53,7 +55,17 @@ export default function PendingOrders({ orders, onDeleteOrder, onFillOrder }) {
                 </td>
                 <td className="px-4 py-3 text-center">
                   <span className="font-mono text-gray-300 dark:text-gray-300 light:text-gray-700">
-                    {formatCurrency(order.price)}
+                    {order.price !== null && order.price !== undefined ? formatNumber(order.price, 4) : '--'}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <span className="font-mono text-gray-300 dark:text-gray-300 light:text-gray-700">
+                    {formatCurrency((Number(order.shares) || 0) * (Number(order.price) || 0))}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <span className="font-mono text-gray-300 dark:text-gray-300 light:text-gray-700">
+                    {formatCurrency(Number(order.commission) || 0)}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-center">
